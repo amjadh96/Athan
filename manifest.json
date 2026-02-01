@@ -3,7 +3,7 @@
     "short_name": "الصلاة",
     "description": "أوقات الصلاة لمدينة برلين - مسجد NBS",
     "start_url": "./index.html",
-    "display": "fullscreen",
+    "display": "standalone",
     "orientation": "portrait",
     "background_color": "#0a1628",
     "theme_color": "#0a1628",
