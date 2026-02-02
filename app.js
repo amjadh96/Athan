@@ -279,6 +279,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     setInterval(checkAthanTime, 1000);
     setupBackButton();
+
+    // Unlock audio playback on first user interaction (browser autoplay policy)
+    const unlockAudio = () => {
+        const audio = document.getElementById('athan-audio');
+        audio.play().then(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            console.log('Audio playback unlocked');
+        }).catch(() => {});
+        document.removeEventListener('click', unlockAudio);
+        document.removeEventListener('touchstart', unlockAudio);
+    };
+    document.addEventListener('click', unlockAudio, { once: true });
+    document.addEventListener('touchstart', unlockAudio, { once: true });
 });
 
 function setupBackButton() {
@@ -686,6 +700,23 @@ function playAthan(prayer) {
         currentAthanObjectUrl = null;
     }
 
+    const tryPlayAudio = () => {
+        audio.volume = prayerSettings.volume / 100;
+        audio.play().catch(err => {
+            console.error('Audio playback failed:', err);
+            // Show notification that audio couldn't play (browser autoplay policy)
+            if (err.name === 'NotAllowedError') {
+                if ('Notification' in window && Notification.permission === 'granted') {
+                    new Notification('الأذان', {
+                        body: 'اضغط على التطبيق لتشغيل الأذان',
+                        icon: 'icons/icon-192.png',
+                        tag: 'athan-unlock'
+                    });
+                }
+            }
+        });
+    };
+
     // Set source
     if (soundId.startsWith('custom-')) {
         getCustomAthan(soundId).then(customAthan => {
@@ -695,17 +726,14 @@ function playAthan(prayer) {
             } else {
                 audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/ناجي قزاز.mp3';
             }
-            audio.volume = prayerSettings.volume / 100;
-            audio.play().catch(() => {});
+            tryPlayAudio();
         }).catch(() => {
             audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/ناجي قزاز.mp3';
-            audio.volume = prayerSettings.volume / 100;
-            audio.play().catch(() => {});
+            tryPlayAudio();
         });
     } else {
         audio.src = BUILTIN_ATHAN[soundId]?.src || Object.values(BUILTIN_ATHAN)[0]?.src;
-        audio.volume = prayerSettings.volume / 100;
-        audio.play().catch(() => {});
+        tryPlayAudio();
     }
 }
 
@@ -716,8 +744,7 @@ function showAthanNotification(prayer) {
             body: `حان الآن وقت صلاة ${prayerName}`,
             icon: 'icons/icon-192.png',
             tag: 'athan-' + prayer,
-            requireInteraction: true,
-            vibrate: [200]
+            silent: true  // We handle vibration separately via navigator.vibrate()
         });
     }
 }
