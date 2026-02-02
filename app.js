@@ -67,16 +67,7 @@ async function loadAthanList() {
 // Popular cities
 const CITIES = [
     { id: 'berlin', name: 'برلين', country: 'Germany' },
-    { id: 'munich', name: 'ميونخ', city: 'Munich', country: 'Germany' },
-    { id: 'frankfurt', name: 'فرانكفورت', city: 'Frankfurt', country: 'Germany' },
-    { id: 'hamburg', name: 'هامبورغ', city: 'Hamburg', country: 'Germany' },
-    { id: 'cologne', name: 'كولونيا', city: 'Cologne', country: 'Germany' },
-    { id: 'dusseldorf', name: 'دوسلدورف', city: 'Dusseldorf', country: 'Germany' },
-    { id: 'vienna', name: 'فيينا', city: 'Vienna', country: 'Austria' },
-    { id: 'zurich', name: 'زيورخ', city: 'Zurich', country: 'Switzerland' },
-    { id: 'amsterdam', name: 'أمستردام', city: 'Amsterdam', country: 'Netherlands' },
-    { id: 'paris', name: 'باريس', city: 'Paris', country: 'France' },
-    { id: 'london', name: 'لندن', city: 'London', country: 'UK' },
+    { id: 'damascus', name: 'دمشق', city: 'Damascus', country: 'Syria' },
     { id: 'custom', name: 'مدينة أخرى...', city: '', country: '' }
 ];
 
@@ -416,7 +407,10 @@ async function updateDisplay() {
     document.getElementById('gregorian-date').textContent = getGregorianDateString(now);
     
     const cityData = CITIES.find(c => c.id === settings.location);
-    document.getElementById('location-label').textContent = cityData ? cityData.name : 'برلين';
+    const locationName = settings.location === 'custom' && settings.customCity
+        ? settings.customCity
+        : (cityData ? cityData.name : 'برلين');
+    document.getElementById('location-label').textContent = locationName;
     
     // Auto-Ramadan detection
     if (settings.autoRamadan) {
