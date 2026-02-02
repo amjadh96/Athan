@@ -241,8 +241,6 @@ async function getPrayerTimesAsync(date) {
 }
 
 // Initialize app
-let audioUnlocked = false;
-
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         await initDB();
@@ -265,27 +263,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     await applyTheme();
     updateAthanIndicators();
     
-    // Unlock audio on first user interaction
-    const unlockAudio = () => {
-        if (audioUnlocked) return;
-        const audio = document.getElementById('athan-audio');
-        audio.play().then(() => {
-            audio.pause();
-            audio.currentTime = 0;
-            audioUnlocked = true;
-        }).catch(() => {});
-        document.removeEventListener('click', unlockAudio);
-        document.removeEventListener('touchstart', unlockAudio);
-    };
-    document.addEventListener('click', unlockAudio);
-    document.addEventListener('touchstart', unlockAudio);
-    
     // Listen for system theme changes
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
         if (settings.themeMode === 'system') applyTheme();
     });
     
     if (settings.screenAwake) requestWakeLock();
+    
+    // Request notification permission for athan alerts
+    requestNotificationPermission();
     
     setInterval(checkAthanTime, 1000);
     setupBackButton();
@@ -640,7 +626,11 @@ async function checkAthanTime() {
                 // Vibrate to indicate athan time (if supported)
                 if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
                 
-                await playAthan(prayer);
+                // Show notification (this can wake up the app)
+                showAthanNotification(prayer);
+                
+                // Try to play audio
+                playAthan(prayer);
                 lastAthanTime = currentTime;
             }
         }
@@ -679,33 +669,49 @@ async function checkAthanTime() {
     }
 }
 
-async function playAthan(prayer) {
+function playAthan(prayer) {
     const audio = document.getElementById('athan-audio');
     const prayerSettings = settings.prayers[prayer];
     const soundId = prayerSettings.sound;
     
+    // Set source
     if (soundId.startsWith('custom-')) {
-        try {
-            const customAthan = await getCustomAthan(soundId);
+        getCustomAthan(soundId).then(customAthan => {
             if (customAthan && customAthan.audio) {
                 audio.src = URL.createObjectURL(customAthan.audio);
             } else {
-                audio.src = BUILTIN_ATHAN.makkah?.src || 'audio/makkah.mp3';
+                audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/makkah.mp3';
             }
-        } catch (e) {
-            audio.src = BUILTIN_ATHAN.makkah?.src || 'audio/makkah.mp3';
-        }
+            audio.volume = prayerSettings.volume / 100;
+            audio.play().catch(() => {});
+        }).catch(() => {
+            audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/makkah.mp3';
+            audio.volume = prayerSettings.volume / 100;
+            audio.play().catch(() => {});
+        });
     } else {
-        audio.src = BUILTIN_ATHAN[soundId]?.src || BUILTIN_ATHAN.makkah?.src || 'audio/makkah.mp3';
+        audio.src = BUILTIN_ATHAN[soundId]?.src || Object.values(BUILTIN_ATHAN)[0]?.src;
+        audio.volume = prayerSettings.volume / 100;
+        audio.play().catch(() => {});
     }
-    
-    audio.volume = prayerSettings.volume / 100;
-    
-    try {
-        await audio.play();
-    } catch (err) {
-        // Audio play failed - likely autoplay policy
-        // Vibration already triggered above
+}
+
+function showAthanNotification(prayer) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+        const prayerName = PRAYER_NAMES[prayer];
+        new Notification('حان وقت الصلاة', {
+            body: `حان الآن وقت صلاة ${prayerName}`,
+            icon: 'icons/icon-192.png',
+            tag: 'athan-' + prayer,
+            requireInteraction: true,
+            vibrate: [200, 100, 200, 100, 200]
+        });
+    }
+}
+
+function requestNotificationPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
     }
 }
 
@@ -830,6 +836,32 @@ async function initSettings() {
             }
         }
         e.target.value = '';
+    });
+    
+    // Test auto athan (simulates what happens at prayer time)
+    document.getElementById('test-auto-athan').addEventListener('click', () => {
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        showAthanNotification('fajr');
+        playAthan('fajr');
+    });
+    
+    // Enable notifications button
+    document.getElementById('enable-notifications').addEventListener('click', () => {
+        if ('Notification' in window) {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    alert('تم تفعيل الإشعارات بنجاح');
+                    new Notification('أوقات الصلاة', {
+                        body: 'تم تفعيل إشعارات الأذان',
+                        icon: 'icons/icon-192.png'
+                    });
+                } else {
+                    alert('لم يتم السماح بالإشعارات');
+                }
+            });
+        } else {
+            alert('المتصفح لا يدعم الإشعارات');
+        }
     });
     
     await generatePrayerSettings();
