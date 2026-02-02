@@ -1,4 +1,4 @@
-const CACHE_NAME = 'prayer-times-v4';
+const CACHE_NAME = 'prayer-times-v6';
 const ASSETS = [
     './',
     './index.html',
@@ -9,7 +9,13 @@ const ASSETS = [
     './manifest.json',
     './icon-192.png',
     './icon-512.png',
-    './audio/athan-list.json'
+    './audio/athan-list.json',
+    './audio/ناجي قزاز.mp3',
+    './audio/أحمد جلال يحيى.mp3',
+    './audio/أذان الأموي الجماعي.mp3',
+    './audio/علي بن أحمد ملا.mp3',
+    './audio/عبد الباسط.mp3',
+    './audio/ناصر القطامي.mp3'
 ];
 
 // Install
@@ -38,11 +44,10 @@ self.addEventListener('message', (event) => {
     if (event.data && event.data.type === 'SHOW_ATHAN_NOTIFICATION') {
         const { prayer, prayerName } = event.data;
         self.registration.showNotification('حان وقت الصلاة', {
-            body: `حان الآن وقت صلاة ${prayerName} - اضغط لتشغيل الأذان`,
+            body: `حان الآن وقت صلاة ${prayerName}`,
             icon: 'icons/icon-192.png',
             tag: 'athan-' + prayer,
             silent: true,
-            requireInteraction: true,
             data: { prayer }
         });
     }

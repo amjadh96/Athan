@@ -50,10 +50,7 @@ let BUILTIN_ATHAN = {
 async function loadAthanList() {
     try {
         const response = await fetch('audio/athan-list.json');
-        if (!response.ok) {
-            console.log('athan-list.json not found, using defaults');
-            return;
-        }
+        if (!response.ok) return;
         const files = await response.json();
         if (files && files.length > 0) {
             BUILTIN_ATHAN = {};
@@ -63,7 +60,7 @@ async function loadAthanList() {
             });
         }
     } catch (e) {
-        console.log('Could not load athan list, using defaults:', e);
+        // Use defaults
     }
 }
 
@@ -222,7 +219,7 @@ async function fetchApiTimes(city, country, date) {
             return monthTimes[date.getDate()];
         }
     } catch (e) {
-        console.log('API error:', e);
+        // API error - fallback to local times
     }
     
     return getPrayerTimes(date);
@@ -252,13 +249,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         await initDB();
     } catch (e) {
-        console.log('DB init error:', e);
+        // DB init failed
     }
-    
+
     try {
         await loadAthanList();
     } catch (e) {
-        console.log('Athan list error:', e);
+        // Use default athan list
     }
     
     loadSettings();
@@ -289,7 +286,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
-    setInterval(checkAthanTime, 1000);
+    setInterval(checkAthanTime, 15000); // Check every 15 seconds (saves battery)
     setupBackButton();
 
     // Unlock audio playback on first user interaction (browser autoplay policy)
@@ -312,9 +309,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             athanAudio.load();
 
             audioUnlocked = true;
-            console.log('Audio unlocked');
         } catch (e) {
-            console.error('Audio unlock failed:', e);
+            // Audio unlock failed - will retry on next interaction
         }
     };
 
@@ -735,11 +731,7 @@ async function playAthan(prayer) {
 
     // Resume AudioContext if suspended (important for Android)
     if (audioContext && audioContext.state === 'suspended') {
-        try {
-            await audioContext.resume();
-        } catch (e) {
-            console.error('AudioContext resume failed:', e);
-        }
+        try { await audioContext.resume(); } catch (e) {}
     }
 
     // Revoke previous object URL to prevent memory leak
@@ -752,22 +744,14 @@ async function playAthan(prayer) {
         audio.volume = prayerSettings.volume / 100;
         audio.currentTime = 0;
 
-        // Wait for audio to be ready, then play
         const playWhenReady = () => {
-            audio.play().catch(err => {
-                console.error('Audio playback failed:', err);
-                // On Android, audio will play when user taps the notification
-            });
+            audio.play().catch(() => {});
         };
 
-        // If audio is ready, play immediately; otherwise wait for canplaythrough
         if (audio.readyState >= 3) {
             playWhenReady();
         } else {
             audio.addEventListener('canplaythrough', playWhenReady, { once: true });
-            audio.addEventListener('error', (e) => {
-                console.error('Audio load error:', e);
-            }, { once: true });
             audio.load();
         }
     };
@@ -793,17 +777,8 @@ async function playAthan(prayer) {
 }
 
 async function showAthanNotification(prayer) {
-    console.log('showAthanNotification called, permission:', Notification.permission);
-
-    if (!('Notification' in window)) {
-        console.log('Notifications not supported');
-        return;
-    }
-
-    if (Notification.permission === 'denied') {
-        console.log('Notifications denied');
-        return;
-    }
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'denied') return;
 
     if (Notification.permission === 'default') {
         const permission = await Notification.requestPermission();
@@ -819,12 +794,11 @@ async function showAthanNotification(prayer) {
             prayer,
             prayerName
         });
-        console.log('Notification sent via Service Worker');
     } else {
         // Fallback for desktop or if SW not ready
         try {
             const notification = new Notification('حان وقت الصلاة', {
-                body: `حان الآن وقت صلاة ${prayerName} - اضغط لتشغيل الأذان`,
+                body: `حان الآن وقت صلاة ${prayerName}`,
                 icon: 'icons/icon-192.png',
                 tag: 'athan-' + prayer,
                 silent: true
@@ -834,9 +808,8 @@ async function showAthanNotification(prayer) {
                 playAthan(prayer);
                 notification.close();
             };
-            console.log('Notification created directly');
         } catch (e) {
-            console.error('Notification failed:', e);
+            // Notification failed
         }
     }
 }
