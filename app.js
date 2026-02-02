@@ -784,7 +784,31 @@ async function playAthan(prayer) {
 }
 
 function showAthanNotification(prayer) {
-    if ('Notification' in window && Notification.permission === 'granted') {
+    console.log('showAthanNotification called, permission:', Notification.permission);
+
+    if (!('Notification' in window)) {
+        console.log('Notifications not supported');
+        alert('المتصفح لا يدعم الإشعارات');
+        return;
+    }
+
+    if (Notification.permission === 'denied') {
+        console.log('Notifications denied');
+        alert('يرجى السماح بالإشعارات من إعدادات المتصفح');
+        return;
+    }
+
+    if (Notification.permission === 'default') {
+        console.log('Requesting notification permission');
+        Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+                showAthanNotification(prayer); // Retry after permission granted
+            }
+        });
+        return;
+    }
+
+    if (Notification.permission === 'granted') {
         const prayerName = PRAYER_NAMES[prayer];
         const notification = new Notification('حان وقت الصلاة', {
             body: `حان الآن وقت صلاة ${prayerName} - اضغط لتشغيل الأذان`,
@@ -800,6 +824,8 @@ function showAthanNotification(prayer) {
             playAthan(prayer);
             notification.close();
         };
+
+        console.log('Notification created');
     }
 }
 
