@@ -288,7 +288,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (audioUnlocked) return;
 
         try {
-            // Create and resume AudioContext (required for Android)
+            // Create AudioContext (required for Android)
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
@@ -296,25 +296,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 await audioContext.resume();
             }
 
-            // Also unlock HTML5 audio elements
+            // Preload the default athan audio
             const athanAudio = document.getElementById('athan-audio');
-            const reminderAudio = document.getElementById('reminder-audio');
-
-            // Play and immediately pause to unlock
-            athanAudio.muted = true;
-            await athanAudio.play().catch(() => {});
-            athanAudio.pause();
-            athanAudio.muted = false;
-            athanAudio.currentTime = 0;
-
-            reminderAudio.muted = true;
-            await reminderAudio.play().catch(() => {});
-            reminderAudio.pause();
-            reminderAudio.muted = false;
-            reminderAudio.currentTime = 0;
+            const defaultSrc = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/ناجي قزاز.mp3';
+            athanAudio.src = defaultSrc;
+            athanAudio.load();
 
             audioUnlocked = true;
-            console.log('Audio unlocked successfully');
+            console.log('Audio unlocked');
         } catch (e) {
             console.error('Audio unlock failed:', e);
         }
@@ -758,16 +747,7 @@ async function playAthan(prayer) {
         const playWhenReady = () => {
             audio.play().catch(err => {
                 console.error('Audio playback failed:', err);
-                // Show notification that audio couldn't play (browser autoplay policy)
-                if (err.name === 'NotAllowedError') {
-                    if ('Notification' in window && Notification.permission === 'granted') {
-                        new Notification('الأذان', {
-                            body: 'اضغط على التطبيق لتشغيل الأذان',
-                            icon: 'icons/icon-192.png',
-                            tag: 'athan-unlock'
-                        });
-                    }
-                }
+                // On Android, audio will play when user taps the notification
             });
         };
 
@@ -806,12 +786,20 @@ async function playAthan(prayer) {
 function showAthanNotification(prayer) {
     if ('Notification' in window && Notification.permission === 'granted') {
         const prayerName = PRAYER_NAMES[prayer];
-        new Notification('حان وقت الصلاة', {
-            body: `حان الآن وقت صلاة ${prayerName}`,
+        const notification = new Notification('حان وقت الصلاة', {
+            body: `حان الآن وقت صلاة ${prayerName} - اضغط لتشغيل الأذان`,
             icon: 'icons/icon-192.png',
             tag: 'athan-' + prayer,
-            silent: true  // We handle vibration separately via navigator.vibrate()
+            silent: true,  // We handle vibration separately via navigator.vibrate()
+            requireInteraction: true  // Keep notification until user interacts
         });
+
+        // When user clicks notification, play athan (this works on Android!)
+        notification.onclick = () => {
+            window.focus();
+            playAthan(prayer);
+            notification.close();
+        };
     }
 }
 
