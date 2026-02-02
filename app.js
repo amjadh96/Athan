@@ -37,6 +37,7 @@ let menuOpen = false;
 let currentScreen = 'main-screen';
 let cachedApiTimes = {};
 let customAthanDB = null;
+let currentAthanObjectUrl = null;
 
 // Athan sources - loaded from audio/athan-list.json or fallback
 let BUILTIN_ATHAN = {
@@ -127,6 +128,7 @@ function initDB() {
 }
 
 async function saveCustomAthan(id, name, audioBlob) {
+    if (!customAthanDB) throw new Error('Database not initialized');
     return new Promise((resolve, reject) => {
         const tx = customAthanDB.transaction('customAthans', 'readwrite');
         const store = tx.objectStore('customAthans');
@@ -137,6 +139,7 @@ async function saveCustomAthan(id, name, audioBlob) {
 }
 
 async function getCustomAthan(id) {
+    if (!customAthanDB) return null;
     return new Promise((resolve, reject) => {
         const tx = customAthanDB.transaction('customAthans', 'readonly');
         const store = tx.objectStore('customAthans');
@@ -147,6 +150,7 @@ async function getCustomAthan(id) {
 }
 
 async function getAllCustomAthans() {
+    if (!customAthanDB) return [];
     return new Promise((resolve, reject) => {
         const tx = customAthanDB.transaction('customAthans', 'readonly');
         const store = tx.objectStore('customAthans');
@@ -157,6 +161,7 @@ async function getAllCustomAthans() {
 }
 
 async function cacheApiTimes(key, times) {
+    if (!customAthanDB) return;
     return new Promise((resolve, reject) => {
         const tx = customAthanDB.transaction('cachedTimes', 'readwrite');
         const store = tx.objectStore('cachedTimes');
@@ -167,6 +172,7 @@ async function cacheApiTimes(key, times) {
 }
 
 async function getCachedApiTimes(key) {
+    if (!customAthanDB) return null;
     return new Promise((resolve, reject) => {
         const tx = customAthanDB.transaction('cachedTimes', 'readonly');
         const store = tx.objectStore('cachedTimes');
@@ -326,14 +332,14 @@ function initNavigation() {
     });
     
     document.getElementById('prev-month').addEventListener('click', () => {
-        currentCalendarMonth++;
-        if (currentCalendarMonth > 11) { currentCalendarMonth = 0; currentCalendarYear++; }
-        updateCalendar();
-    });
-    
-    document.getElementById('next-month').addEventListener('click', () => {
         currentCalendarMonth--;
         if (currentCalendarMonth < 0) { currentCalendarMonth = 11; currentCalendarYear--; }
+        updateCalendar();
+    });
+
+    document.getElementById('next-month').addEventListener('click', () => {
+        currentCalendarMonth++;
+        if (currentCalendarMonth > 11) { currentCalendarMonth = 0; currentCalendarYear++; }
         updateCalendar();
     });
 }
@@ -622,7 +628,7 @@ async function checkAthanTime() {
         if (currentTime === prayerTime && lastAthanTime !== currentTime) {
             if (prayerSettings.athan && prayer !== 'sunrise') {
                 // Vibrate to indicate athan time (if supported)
-                if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+                if (navigator.vibrate) navigator.vibrate([200]);
                 
                 // Show notification (this can wake up the app)
                 showAthanNotification(prayer);
@@ -638,27 +644,29 @@ async function checkAthanTime() {
             let reminderMins = pMins - prayerSettings.preBefore;
             let reminderHours = pHours;
             if (reminderMins < 0) { reminderMins += 60; reminderHours--; }
+            if (reminderHours < 0) { reminderHours += 24; }
             const reminderH = String(reminderHours).padStart(2, '0');
             const reminderM = String(reminderMins).padStart(2, '0');
             const reminderTime = `${reminderH}:${reminderM}`;
             const reminderKey = `pre-${prayer}`;
-            
+
             if (currentTime === reminderTime && lastReminderTime[reminderKey] !== currentTime) {
                 playReminder();
                 lastReminderTime[reminderKey] = currentTime;
             }
         }
-        
+
         if (prayerSettings.postEnabled && prayerSettings.postAfter > 0) {
             const [pHours, pMins] = prayerTime.split(':').map(Number);
             let reminderMins = pMins + prayerSettings.postAfter;
             let reminderHours = pHours;
             if (reminderMins >= 60) { reminderMins -= 60; reminderHours++; }
+            if (reminderHours >= 24) { reminderHours -= 24; }
             const reminderH = String(reminderHours).padStart(2, '0');
             const reminderM = String(reminderMins).padStart(2, '0');
             const reminderTime = `${reminderH}:${reminderM}`;
             const reminderKey = `post-${prayer}`;
-            
+
             if (currentTime === reminderTime && lastReminderTime[reminderKey] !== currentTime) {
                 playReminder();
                 lastReminderTime[reminderKey] = currentTime;
@@ -671,12 +679,19 @@ function playAthan(prayer) {
     const audio = document.getElementById('athan-audio');
     const prayerSettings = settings.prayers[prayer];
     const soundId = prayerSettings.sound;
-    
+
+    // Revoke previous object URL to prevent memory leak
+    if (currentAthanObjectUrl) {
+        URL.revokeObjectURL(currentAthanObjectUrl);
+        currentAthanObjectUrl = null;
+    }
+
     // Set source
     if (soundId.startsWith('custom-')) {
         getCustomAthan(soundId).then(customAthan => {
             if (customAthan && customAthan.audio) {
-                audio.src = URL.createObjectURL(customAthan.audio);
+                currentAthanObjectUrl = URL.createObjectURL(customAthan.audio);
+                audio.src = currentAthanObjectUrl;
             } else {
                 audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/ناجي قزاز.mp3';
             }
@@ -702,7 +717,7 @@ function showAthanNotification(prayer) {
             icon: 'icons/icon-192.png',
             tag: 'athan-' + prayer,
             requireInteraction: true,
-            vibrate: [200, 100, 200, 100, 200]
+            vibrate: [200]
         });
     }
 }
@@ -717,19 +732,26 @@ async function testAthan(prayer) {
     const audio = document.getElementById('athan-audio');
     const prayerSettings = settings.prayers[prayer];
     const soundId = prayerSettings.sound;
-    
+
     // If already playing, stop it
     if (!audio.paused) {
         audio.pause();
         audio.currentTime = 0;
         return;
     }
-    
+
+    // Revoke previous object URL to prevent memory leak
+    if (currentAthanObjectUrl) {
+        URL.revokeObjectURL(currentAthanObjectUrl);
+        currentAthanObjectUrl = null;
+    }
+
     if (soundId.startsWith('custom-')) {
         try {
             const customAthan = await getCustomAthan(soundId);
             if (customAthan && customAthan.audio) {
-                audio.src = URL.createObjectURL(customAthan.audio);
+                currentAthanObjectUrl = URL.createObjectURL(customAthan.audio);
+                audio.src = currentAthanObjectUrl;
             }
         } catch (e) {
             audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/athan.mp3';
@@ -737,7 +759,7 @@ async function testAthan(prayer) {
     } else {
         audio.src = BUILTIN_ATHAN[soundId]?.src || Object.values(BUILTIN_ATHAN)[0]?.src;
     }
-    
+
     audio.volume = prayerSettings.volume / 100;
     audio.currentTime = 0;
     audio.play().catch(err => alert('فشل تشغيل الأذان'));
@@ -838,7 +860,7 @@ async function initSettings() {
     
     // Test auto athan (simulates what happens at prayer time)
     document.getElementById('test-auto-athan').addEventListener('click', () => {
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        if (navigator.vibrate) navigator.vibrate([200]);
         showAthanNotification('fajr');
         playAthan('fajr');
     });
