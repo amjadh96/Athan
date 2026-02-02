@@ -33,6 +33,7 @@ let currentCalendarYear = new Date().getFullYear();
 let wakeLock = null;
 let lastAthanTime = null;
 let lastReminderTime = {};
+let isCheckingAthan = false;
 let menuOpen = false;
 let currentScreen = 'main-screen';
 let cachedApiTimes = {};
@@ -621,37 +622,44 @@ function applySpecialTheme(date) {
 }
 
 async function checkAthanTime() {
-    const now = new Date();
-    const times = await getPrayerTimesAsync(now);
-    const h = String(now.getHours()).padStart(2, '0');
-    const m = String(now.getMinutes()).padStart(2, '0');
-    const currentTime = `${h}:${m}`;
-    
-    // Reset lastAthanTime at midnight
-    if (currentTime === '00:00' && lastAthanTime !== '00:00') {
-        lastAthanTime = null;
-        lastReminderTime = {};
-    }
-    
-    const prayers = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'];
-    
-    for (const [index, prayer] of prayers.entries()) {
-        const prayerTime = times[index];
-        const prayerSettings = settings.prayers[prayer];
-        
-        if (currentTime === prayerTime && lastAthanTime !== currentTime) {
-            if (prayerSettings.athan && prayer !== 'sunrise') {
-                // Vibrate to indicate athan time (if supported)
-                if (navigator.vibrate) navigator.vibrate([200]);
-                
-                // Show notification (this can wake up the app)
-                showAthanNotification(prayer);
-                
-                // Try to play audio
-                playAthan(prayer);
-                lastAthanTime = currentTime;
-            }
+    // Prevent concurrent execution
+    if (isCheckingAthan) return;
+    isCheckingAthan = true;
+
+    try {
+        const now = new Date();
+        const times = await getPrayerTimesAsync(now);
+        const h = String(now.getHours()).padStart(2, '0');
+        const m = String(now.getMinutes()).padStart(2, '0');
+        const currentTime = `${h}:${m}`;
+
+        // Reset lastAthanTime at midnight
+        if (currentTime === '00:00' && lastAthanTime !== '00:00') {
+            lastAthanTime = null;
+            lastReminderTime = {};
         }
+
+        const prayers = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'];
+
+        for (const [index, prayer] of prayers.entries()) {
+            const prayerTime = times[index];
+            const prayerSettings = settings.prayers[prayer];
+
+            if (currentTime === prayerTime && lastAthanTime !== currentTime) {
+                if (prayerSettings.athan && prayer !== 'sunrise') {
+                    // Set lastAthanTime FIRST to prevent duplicate triggers
+                    lastAthanTime = currentTime;
+
+                    // Vibrate once (200ms)
+                    if (navigator.vibrate) navigator.vibrate(200);
+
+                    // Show notification
+                    showAthanNotification(prayer);
+
+                    // Play audio
+                    playAthan(prayer);
+                }
+            }
         
         if (prayerSettings.preEnabled && prayerSettings.preBefore > 0) {
             const [pHours, pMins] = prayerTime.split(':').map(Number);
@@ -687,6 +695,9 @@ async function checkAthanTime() {
             }
         }
     }
+    } finally {
+        isCheckingAthan = false;
+    }
 }
 
 function playAthan(prayer) {
@@ -702,19 +713,35 @@ function playAthan(prayer) {
 
     const tryPlayAudio = () => {
         audio.volume = prayerSettings.volume / 100;
-        audio.play().catch(err => {
-            console.error('Audio playback failed:', err);
-            // Show notification that audio couldn't play (browser autoplay policy)
-            if (err.name === 'NotAllowedError') {
-                if ('Notification' in window && Notification.permission === 'granted') {
-                    new Notification('الأذان', {
-                        body: 'اضغط على التطبيق لتشغيل الأذان',
-                        icon: 'icons/icon-192.png',
-                        tag: 'athan-unlock'
-                    });
+        audio.currentTime = 0;
+
+        // Wait for audio to be ready, then play
+        const playWhenReady = () => {
+            audio.play().catch(err => {
+                console.error('Audio playback failed:', err);
+                // Show notification that audio couldn't play (browser autoplay policy)
+                if (err.name === 'NotAllowedError') {
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification('الأذان', {
+                            body: 'اضغط على التطبيق لتشغيل الأذان',
+                            icon: 'icons/icon-192.png',
+                            tag: 'athan-unlock'
+                        });
+                    }
                 }
-            }
-        });
+            });
+        };
+
+        // If audio is ready, play immediately; otherwise wait for canplaythrough
+        if (audio.readyState >= 3) {
+            playWhenReady();
+        } else {
+            audio.addEventListener('canplaythrough', playWhenReady, { once: true });
+            audio.addEventListener('error', (e) => {
+                console.error('Audio load error:', e);
+            }, { once: true });
+            audio.load();
+        }
     };
 
     // Set source
