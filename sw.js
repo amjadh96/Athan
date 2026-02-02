@@ -1,4 +1,4 @@
-const CACHE_NAME = 'prayer-times-v3';
+const CACHE_NAME = 'prayer-times-v4';
 const ASSETS = [
     './',
     './index.html',
@@ -30,6 +30,47 @@ self.addEventListener('activate', (event) => {
                     .map(key => caches.delete(key))
             );
         }).then(() => self.clients.claim())
+    );
+});
+
+// Handle messages from the app (for notifications)
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SHOW_ATHAN_NOTIFICATION') {
+        const { prayer, prayerName } = event.data;
+        self.registration.showNotification('حان وقت الصلاة', {
+            body: `حان الآن وقت صلاة ${prayerName} - اضغط لتشغيل الأذان`,
+            icon: 'icons/icon-192.png',
+            tag: 'athan-' + prayer,
+            silent: true,
+            requireInteraction: true,
+            data: { prayer }
+        });
+    }
+});
+
+// Handle notification click
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+
+    const prayer = event.notification.data?.prayer || 'fajr';
+
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+            // Focus existing window if available
+            for (const client of clientList) {
+                if ('focus' in client) {
+                    client.focus();
+                    client.postMessage({ type: 'PLAY_ATHAN', prayer });
+                    return;
+                }
+            }
+            // Otherwise open new window
+            if (clients.openWindow) {
+                return clients.openWindow('/').then(client => {
+                    client.postMessage({ type: 'PLAY_ATHAN', prayer });
+                });
+            }
+        })
     );
 });
 

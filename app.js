@@ -279,7 +279,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Request notification permission for athan alerts
     requestNotificationPermission();
-    
+
+    // Listen for messages from Service Worker (notification clicks)
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'PLAY_ATHAN') {
+                playAthan(event.data.prayer);
+            }
+        });
+    }
+
     setInterval(checkAthanTime, 1000);
     setupBackButton();
 
@@ -783,49 +792,52 @@ async function playAthan(prayer) {
     }
 }
 
-function showAthanNotification(prayer) {
+async function showAthanNotification(prayer) {
     console.log('showAthanNotification called, permission:', Notification.permission);
 
     if (!('Notification' in window)) {
         console.log('Notifications not supported');
-        alert('المتصفح لا يدعم الإشعارات');
         return;
     }
 
     if (Notification.permission === 'denied') {
         console.log('Notifications denied');
-        alert('يرجى السماح بالإشعارات من إعدادات المتصفح');
         return;
     }
 
     if (Notification.permission === 'default') {
-        console.log('Requesting notification permission');
-        Notification.requestPermission().then(permission => {
-            if (permission === 'granted') {
-                showAthanNotification(prayer); // Retry after permission granted
-            }
-        });
-        return;
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
     }
 
-    if (Notification.permission === 'granted') {
-        const prayerName = PRAYER_NAMES[prayer];
-        const notification = new Notification('حان وقت الصلاة', {
-            body: `حان الآن وقت صلاة ${prayerName} - اضغط لتشغيل الأذان`,
-            icon: 'icons/icon-192.png',
-            tag: 'athan-' + prayer,
-            silent: true,  // We handle vibration separately via navigator.vibrate()
-            requireInteraction: true  // Keep notification until user interacts
+    const prayerName = PRAYER_NAMES[prayer];
+
+    // Use Service Worker for notifications (required on Android)
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'SHOW_ATHAN_NOTIFICATION',
+            prayer,
+            prayerName
         });
-
-        // When user clicks notification, play athan (this works on Android!)
-        notification.onclick = () => {
-            window.focus();
-            playAthan(prayer);
-            notification.close();
-        };
-
-        console.log('Notification created');
+        console.log('Notification sent via Service Worker');
+    } else {
+        // Fallback for desktop or if SW not ready
+        try {
+            const notification = new Notification('حان وقت الصلاة', {
+                body: `حان الآن وقت صلاة ${prayerName} - اضغط لتشغيل الأذان`,
+                icon: 'icons/icon-192.png',
+                tag: 'athan-' + prayer,
+                silent: true
+            });
+            notification.onclick = () => {
+                window.focus();
+                playAthan(prayer);
+                notification.close();
+            };
+            console.log('Notification created directly');
+        } catch (e) {
+            console.error('Notification failed:', e);
+        }
     }
 }
 
