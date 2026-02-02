@@ -19,12 +19,12 @@ let settings = {
     screenAwake: true,
     showTomorrowTimes: true,
     prayers: {
-        fajr: { athan: true, sound: 'makkah', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
-        sunrise: { athan: false, sound: 'makkah', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
-        dhuhr: { athan: true, sound: 'makkah', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
-        asr: { athan: true, sound: 'makkah', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
-        maghrib: { athan: true, sound: 'makkah', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
-        isha: { athan: true, sound: 'makkah', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false }
+        fajr: { athan: true, sound: 'naji', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
+        sunrise: { athan: false, sound: 'naji', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
+        dhuhr: { athan: true, sound: 'naji', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
+        asr: { athan: true, sound: 'naji', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
+        maghrib: { athan: true, sound: 'naji', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
+        isha: { athan: true, sound: 'naji', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false }
     }
 };
 
@@ -40,9 +40,7 @@ let customAthanDB = null;
 
 // Athan sources - loaded from audio/athan-list.json or fallback
 let BUILTIN_ATHAN = {
-    makkah: { name: 'makkah', src: 'audio/makkah.mp3' },
-    madinah: { name: 'madinah', src: 'audio/madinah.mp3' },
-    mishary: { name: 'mishary', src: 'audio/mishary.mp3' }
+    naji: { name: 'naji', src: 'audio/ناجي قزاز.mp3' },
 };
 
 async function loadAthanList() {
@@ -680,12 +678,12 @@ function playAthan(prayer) {
             if (customAthan && customAthan.audio) {
                 audio.src = URL.createObjectURL(customAthan.audio);
             } else {
-                audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/makkah.mp3';
+                audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/ناجي قزاز.mp3';
             }
             audio.volume = prayerSettings.volume / 100;
             audio.play().catch(() => {});
         }).catch(() => {
-            audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/makkah.mp3';
+            audio.src = Object.values(BUILTIN_ATHAN)[0]?.src || 'audio/ناجي قزاز.mp3';
             audio.volume = prayerSettings.volume / 100;
             audio.play().catch(() => {});
         });
@@ -1007,7 +1005,7 @@ function loadSettings() {
         const parsed = JSON.parse(saved);
         settings = { ...settings, ...parsed };
         ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'].forEach(p => {
-            if (!settings.prayers[p].sound) settings.prayers[p].sound = 'makkah';
+            if (!settings.prayers[p].sound) settings.prayers[p].sound = 'naji';
         });
     }
 }
