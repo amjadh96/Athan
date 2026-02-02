@@ -39,6 +39,8 @@ let currentScreen = 'main-screen';
 let cachedApiTimes = {};
 let customAthanDB = null;
 let currentAthanObjectUrl = null;
+let audioContext = null;
+let audioUnlocked = false;
 
 // Athan sources - loaded from audio/athan-list.json or fallback
 let BUILTIN_ATHAN = {
@@ -282,18 +284,46 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupBackButton();
 
     // Unlock audio playback on first user interaction (browser autoplay policy)
-    const unlockAudio = () => {
-        const audio = document.getElementById('athan-audio');
-        audio.play().then(() => {
-            audio.pause();
-            audio.currentTime = 0;
-            console.log('Audio playback unlocked');
-        }).catch(() => {});
-        document.removeEventListener('click', unlockAudio);
-        document.removeEventListener('touchstart', unlockAudio);
+    const unlockAudio = async () => {
+        if (audioUnlocked) return;
+
+        try {
+            // Create and resume AudioContext (required for Android)
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+
+            // Also unlock HTML5 audio elements
+            const athanAudio = document.getElementById('athan-audio');
+            const reminderAudio = document.getElementById('reminder-audio');
+
+            // Play and immediately pause to unlock
+            athanAudio.muted = true;
+            await athanAudio.play().catch(() => {});
+            athanAudio.pause();
+            athanAudio.muted = false;
+            athanAudio.currentTime = 0;
+
+            reminderAudio.muted = true;
+            await reminderAudio.play().catch(() => {});
+            reminderAudio.pause();
+            reminderAudio.muted = false;
+            reminderAudio.currentTime = 0;
+
+            audioUnlocked = true;
+            console.log('Audio unlocked successfully');
+        } catch (e) {
+            console.error('Audio unlock failed:', e);
+        }
     };
-    document.addEventListener('click', unlockAudio, { once: true });
-    document.addEventListener('touchstart', unlockAudio, { once: true });
+
+    // Listen for any user interaction to unlock audio
+    ['click', 'touchstart', 'touchend', 'keydown'].forEach(event => {
+        document.addEventListener(event, unlockAudio, { once: true });
+    });
 });
 
 function setupBackButton() {
@@ -700,10 +730,19 @@ async function checkAthanTime() {
     }
 }
 
-function playAthan(prayer) {
+async function playAthan(prayer) {
     const audio = document.getElementById('athan-audio');
     const prayerSettings = settings.prayers[prayer];
     const soundId = prayerSettings.sound;
+
+    // Resume AudioContext if suspended (important for Android)
+    if (audioContext && audioContext.state === 'suspended') {
+        try {
+            await audioContext.resume();
+        } catch (e) {
+            console.error('AudioContext resume failed:', e);
+        }
+    }
 
     // Revoke previous object URL to prevent memory leak
     if (currentAthanObjectUrl) {
