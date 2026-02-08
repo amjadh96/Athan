@@ -1,0 +1,14 @@
+{
+  "appId": "com.athan.prayertimes",
+  "appName": "Athan",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_prayer",
+      "iconColor": "#1a73e8"
+    }
+  }
+}

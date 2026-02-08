@@ -323,6 +323,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     setInterval(checkAthanTime, 15000); // Check every 15 seconds (saves battery)
     setupBackButton();
 
+    // Initialize Capacitor native features if available
+    if (window.CapacitorBridge && window.CapacitorBridge.isNative) {
+        try {
+            await window.CapacitorBridge.init();
+            console.log('Capacitor bridge initialized');
+        } catch (e) {
+            console.error('Capacitor bridge init failed:', e);
+        }
+    }
+
     // Unlock audio playback on first user interaction (browser autoplay policy)
     const unlockAudio = async () => {
         if (audioUnlocked) return;
@@ -716,14 +726,18 @@ async function checkAthanTime() {
                     // Set lastAthanTime FIRST to prevent duplicate triggers
                     lastAthanTime = currentTime;
 
-                    // Vibrate once (200ms)
-                    if (navigator.vibrate) navigator.vibrate(200);
+                    // Only play athan via web code if NOT in Capacitor
+                    // (Capacitor handles it via native notifications)
+                    if (!window.isCapacitorNative) {
+                        // Vibrate once (200ms)
+                        if (navigator.vibrate) navigator.vibrate(200);
 
-                    // Show notification
-                    showAthanNotification(prayer);
+                        // Show notification
+                        showAthanNotification(prayer);
 
-                    // Play audio
-                    playAthan(prayer);
+                        // Play audio
+                        playAthan(prayer);
+                    }
                 }
             }
         
@@ -1205,7 +1219,15 @@ function loadSettingsToUI() {
     }
 }
 
-function saveSettings() { localStorage.setItem('prayerSettings', JSON.stringify(settings)); }
+function saveSettings() {
+    localStorage.setItem('prayerSettings', JSON.stringify(settings));
+    // Reschedule native notifications when settings change
+    if (window.CapacitorBridge && window.CapacitorBridge.isNative) {
+        window.CapacitorBridge.scheduleNotifications().catch(e =>
+            console.error('Reschedule failed:', e)
+        );
+    }
+}
 
 function loadSettings() {
     const saved = localStorage.getItem('prayerSettings');

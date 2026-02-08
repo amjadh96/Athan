@@ -1,0 +1,31 @@
+{
+  "name": "athan",
+  "version": "1.0.0",
+  "description": "تطبيق أوقات الصلاة لمدينة برلين - مسجد NBS (نويكولن)",
+  "main": "app.js",
+  "scripts": {
+    "build": "node scripts/prepare-www.js",
+    "cap:sync": "npx cap sync",
+    "cap:open": "npx cap open android",
+    "cap:run": "npx cap run android"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/amjadh96/Athan.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/amjadh96/Athan/issues"
+  },
+  "homepage": "https://github.com/amjadh96/Athan#readme",
+  "dependencies": {
+    "@capacitor/android": "^8.0.2",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/cli": "^8.0.2",
+    "@capacitor/core": "^8.0.2",
+    "@capacitor/local-notifications": "^8.0.0"
+  }
+}
