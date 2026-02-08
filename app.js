@@ -406,10 +406,23 @@ function initNavigation() {
     
     // Fullscreen toggle in menu
     document.getElementById('menu-fullscreen-toggle').addEventListener('click', () => {
-        if (document.fullscreenElement) {
-            document.exitFullscreen?.();
+        if (window.isCapacitorNative) {
+            const StatusBar = window.Capacitor?.Plugins?.StatusBar;
+            if (StatusBar) {
+                if (document.body.classList.contains('fullscreen')) {
+                    StatusBar.show();
+                    document.body.classList.remove('fullscreen');
+                } else {
+                    StatusBar.hide();
+                    document.body.classList.add('fullscreen');
+                }
+            }
         } else {
-            document.documentElement.requestFullscreen?.();
+            if (document.fullscreenElement) {
+                document.exitFullscreen?.();
+            } else {
+                document.documentElement.requestFullscreen?.();
+            }
         }
         menuOpen = false;
         dropdownMenu.classList.remove('show');
@@ -726,18 +739,16 @@ async function checkAthanTime() {
                     // Set lastAthanTime FIRST to prevent duplicate triggers
                     lastAthanTime = currentTime;
 
-                    // Only play athan via web code if NOT in Capacitor
-                    // (Capacitor handles it via native notifications)
+                    // Vibrate once (200ms)
+                    if (navigator.vibrate) navigator.vibrate(200);
+
+                    // Show notification (skip in Capacitor - native handles it)
                     if (!window.isCapacitorNative) {
-                        // Vibrate once (200ms)
-                        if (navigator.vibrate) navigator.vibrate(200);
-
-                        // Show notification
                         showAthanNotification(prayer);
-
-                        // Play audio
-                        playAthan(prayer);
                     }
+
+                    // Play audio
+                    playAthan(prayer);
                 }
             }
         
@@ -1103,8 +1114,16 @@ async function initSettings() {
     document.getElementById('fullscreen-mode').addEventListener('change', (e) => {
         settings.fullscreenMode = e.target.checked;
         saveSettings();
-        if (e.target.checked) { document.body.classList.add('fullscreen'); document.documentElement.requestFullscreen?.(); }
-        else { document.body.classList.remove('fullscreen'); document.exitFullscreen?.(); }
+        if (window.isCapacitorNative) {
+            const StatusBar = window.Capacitor?.Plugins?.StatusBar;
+            if (StatusBar) {
+                if (e.target.checked) { StatusBar.hide(); document.body.classList.add('fullscreen'); }
+                else { StatusBar.show(); document.body.classList.remove('fullscreen'); }
+            }
+        } else {
+            if (e.target.checked) { document.body.classList.add('fullscreen'); document.documentElement.requestFullscreen?.(); }
+            else { document.body.classList.remove('fullscreen'); document.exitFullscreen?.(); }
+        }
     });
     document.getElementById('screen-awake').addEventListener('change', (e) => {
         settings.screenAwake = e.target.checked;
@@ -1203,6 +1222,10 @@ function loadSettingsToUI() {
     document.getElementById('time-format').value = settings.timeFormat;
     document.getElementById('show-tomorrow-times').checked = settings.showTomorrowTimes;
     document.getElementById('fullscreen-mode').checked = settings.fullscreenMode;
+    if (settings.fullscreenMode && window.isCapacitorNative) {
+        const StatusBar = window.Capacitor?.Plugins?.StatusBar;
+        if (StatusBar) { StatusBar.hide(); document.body.classList.add('fullscreen'); }
+    }
     document.getElementById('screen-awake').checked = settings.screenAwake;
     document.getElementById('dst-offset').value = settings.dstOffset;
     

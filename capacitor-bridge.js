@@ -17,6 +17,7 @@
             cancelAllNotifications: async () => { },
             init: async () => { },
             testNotification: async () => { },
+            debugStatus: () => 'Not running in Capacitor',
             isNative: false
         };
         return;
@@ -24,11 +25,28 @@
 
     console.log('CapacitorBridge: Running in native mode');
 
-    const { LocalNotifications } = window.Capacitor.Plugins;
-    const { App } = window.Capacitor.Plugins;
+    let LocalNotifications, App;
+    try {
+        LocalNotifications = window.Capacitor.Plugins.LocalNotifications;
+        App = window.Capacitor.Plugins.App;
+        console.log('CapacitorBridge: Plugins loaded', !!LocalNotifications, !!App);
+    } catch (e) {
+        console.error('CapacitorBridge: Failed to load plugins', e);
+        window.CapacitorBridge = {
+            scheduleNotifications: async () => { },
+            cancelAllNotifications: async () => { },
+            init: async () => { },
+            testNotification: async () => { },
+            debugStatus: () => 'Plugin load failed: ' + e.message,
+            isNative: true
+        };
+        return;
+    }
 
     // Map BUILTIN_ATHAN keys (Arabic filenames without extension) to Android res/raw/ names
+    // Also map the default 'naji' key used before loadAthanList() runs
     const SOUND_TO_RAW = {
+        'naji': 'athan_naji',
         'ناجي قزاز': 'athan_naji',
         'أحمد جلال يحيى': 'athan_ahmad',
         'أذان الأموي الجماعي': 'athan_omawi',
@@ -50,10 +68,13 @@
     const PRAYER_LIST = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
     const PRAYER_INDICES = { fajr: 0, dhuhr: 2, asr: 3, maghrib: 4, isha: 5 };
 
+    // Track debug info
+    let lastDebug = {};
+
     function getSoundForPrayer(prayer) {
-        const soundId = window.settings?.prayers?.[prayer]?.sound || 'ناجي قزاز';
+        const soundId = window.settings?.prayers?.[prayer]?.sound || 'naji';
         if (soundId.startsWith('custom-')) {
-            return 'athan_naji'; // Custom athans can't be used as notification sounds, fallback
+            return 'athan_naji';
         }
         return SOUND_TO_RAW[soundId] || 'athan_naji';
     }
@@ -61,10 +82,12 @@
     async function requestPermissions() {
         try {
             const result = await LocalNotifications.requestPermissions();
-            console.log('Notification permission:', result.display);
+            lastDebug.permission = result.display;
+            console.log('CapacitorBridge: Notification permission:', result.display);
             return result;
         } catch (e) {
-            console.error('Permission request failed:', e);
+            lastDebug.permissionError = e.message;
+            console.error('CapacitorBridge: Permission request failed:', e);
         }
     }
 
@@ -75,7 +98,7 @@
                 await LocalNotifications.cancel({ notifications: pending.notifications });
             }
         } catch (e) {
-            console.error('Failed to cancel notifications:', e);
+            console.error('CapacitorBridge: Failed to cancel notifications:', e);
         }
     }
 
@@ -104,8 +127,12 @@
                 visibility: 1,
                 vibration: true
             });
+
+            lastDebug.channels = 'created';
+            console.log('CapacitorBridge: Channels created');
         } catch (e) {
-            console.error('Failed to create channels:', e);
+            lastDebug.channelError = e.message;
+            console.error('CapacitorBridge: Failed to create channels:', e);
         }
     }
 
@@ -118,7 +145,12 @@
             if (!prayerSettings || !prayerSettings.athan) continue;
 
             const index = PRAYER_INDICES[prayer];
-            const [hours, minutes] = times[index].split(':').map(Number);
+            const timeStr = times[index];
+            if (!timeStr) {
+                console.warn('CapacitorBridge: No time for', prayer, 'at index', index);
+                continue;
+            }
+            const [hours, minutes] = timeStr.split(':').map(Number);
             const scheduleDate = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hours, minutes, 0);
 
             // Skip if in the past
@@ -188,63 +220,98 @@
             const tomorrowNotifs = buildNotificationsForDay(tomorrowTimes, tomorrow, 30);
             const all = [...todayNotifs, ...tomorrowNotifs];
 
+            lastDebug.scheduledCount = all.length;
+            lastDebug.scheduledAt = now.toLocaleTimeString();
+            lastDebug.nextNotifs = all.slice(0, 3).map(n => ({
+                prayer: n.extra.prayer,
+                at: n.schedule.at.toLocaleTimeString(),
+                sound: n.sound
+            }));
+
             if (all.length > 0) {
                 await LocalNotifications.schedule({ notifications: all });
-                console.log('Scheduled', all.length, 'notifications');
+                console.log('CapacitorBridge: Scheduled', all.length, 'notifications:', JSON.stringify(lastDebug.nextNotifs));
+            } else {
+                console.log('CapacitorBridge: No upcoming notifications to schedule');
             }
         } catch (e) {
-            console.error('Failed to schedule notifications:', e);
+            lastDebug.scheduleError = e.message;
+            console.error('CapacitorBridge: Failed to schedule notifications:', e);
         }
     }
 
     // When notification fires while app is in foreground, play full athan
-    LocalNotifications.addListener('localNotificationReceived', (notification) => {
-        console.log('Notification received in foreground:', notification);
-        const prayer = notification.extra?.prayer;
-        const type = notification.extra?.type;
-        if (prayer && !type && typeof window.playAthan === 'function') {
-            window.playAthan(prayer);
-        }
-    });
+    try {
+        LocalNotifications.addListener('localNotificationReceived', (notification) => {
+            console.log('CapacitorBridge: Notification received in foreground:', JSON.stringify(notification));
+            const prayer = notification.extra?.prayer;
+            const type = notification.extra?.type;
+            if (prayer && !type && typeof window.playAthan === 'function') {
+                window.playAthan(prayer);
+            }
+        });
 
-    // When user taps notification, open app and play full athan
-    LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
-        console.log('Notification tapped:', action);
-        const prayer = action.notification.extra?.prayer;
-        if (prayer && typeof window.playAthan === 'function') {
-            window.playAthan(prayer);
-        }
-    });
+        // When user taps notification, open app and play full athan
+        LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
+            console.log('CapacitorBridge: Notification tapped:', JSON.stringify(action));
+            const prayer = action.notification.extra?.prayer;
+            if (prayer && typeof window.playAthan === 'function') {
+                window.playAthan(prayer);
+            }
+        });
+    } catch (e) {
+        console.error('CapacitorBridge: Failed to add listeners:', e);
+    }
 
     // Reschedule on app resume
-    App.addListener('appStateChange', async (state) => {
-        if (state.isActive) {
-            console.log('App resumed, rescheduling notifications');
-            await scheduleNotifications();
-        }
-    });
+    try {
+        App.addListener('appStateChange', async (state) => {
+            if (state.isActive) {
+                console.log('CapacitorBridge: App resumed, rescheduling notifications');
+                await scheduleNotifications();
+            }
+        });
+    } catch (e) {
+        console.error('CapacitorBridge: Failed to add app listener:', e);
+    }
 
     async function testNotification() {
         const testDate = new Date(Date.now() + 10000);
-        await LocalNotifications.schedule({
-            notifications: [{
-                id: 999,
-                title: 'اختبار الأذان',
-                body: 'هذا اختبار لإشعار وقت الصلاة',
-                schedule: { at: testDate, allowWhileIdle: true },
-                sound: 'athan_naji.mp3',
-                channelId: 'athan-fajr',
-                extra: { prayer: 'fajr' }
-            }]
-        });
-        console.log('Test notification scheduled for', testDate.toLocaleTimeString());
+        try {
+            await LocalNotifications.schedule({
+                notifications: [{
+                    id: 999,
+                    title: 'اختبار الأذان',
+                    body: 'هذا اختبار لإشعار وقت الصلاة',
+                    schedule: { at: testDate, allowWhileIdle: true },
+                    sound: 'athan_naji.mp3',
+                    channelId: 'athan-fajr',
+                    extra: { prayer: 'fajr' }
+                }]
+            });
+            console.log('CapacitorBridge: Test notification scheduled for', testDate.toLocaleTimeString());
+            return 'Test notification scheduled for ' + testDate.toLocaleTimeString();
+        } catch (e) {
+            console.error('CapacitorBridge: Test notification failed:', e);
+            return 'Failed: ' + e.message;
+        }
+    }
+
+    function debugStatus() {
+        return JSON.stringify(lastDebug, null, 2);
     }
 
     async function init() {
-        await requestPermissions();
-        await createChannels();
-        await scheduleNotifications();
-        console.log('CapacitorBridge initialized');
+        try {
+            await requestPermissions();
+            await createChannels();
+            await scheduleNotifications();
+            lastDebug.initialized = true;
+            console.log('CapacitorBridge: Initialized successfully');
+        } catch (e) {
+            lastDebug.initError = e.message;
+            console.error('CapacitorBridge: Init failed:', e);
+        }
     }
 
     window.CapacitorBridge = {
@@ -252,6 +319,7 @@
         cancelAllNotifications,
         init,
         testNotification,
+        debugStatus,
         isNative: true
     };
 })();
