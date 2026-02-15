@@ -35,9 +35,17 @@ function gregorianToHijri(gYear, gMonth, gDay) {
     };
 }
 
-function getHijriDateString(date) {
-    const hijri = gregorianToHijri(date.getFullYear(), date.getMonth() + 1, date.getDate());
+function getHijriDateString(date, offset) {
+    const adjusted = new Date(date);
+    adjusted.setDate(adjusted.getDate() + (offset || 0));
+    const hijri = gregorianToHijri(adjusted.getFullYear(), adjusted.getMonth() + 1, adjusted.getDate());
     return `${hijri.day} ${hijri.monthName} ${hijri.year} هـ`;
+}
+
+function getAdjustedHijri(date, offset) {
+    const adjusted = new Date(date);
+    adjusted.setDate(adjusted.getDate() + (offset || 0));
+    return gregorianToHijri(adjusted.getFullYear(), adjusted.getMonth() + 1, adjusted.getDate());
 }
 
 function getGregorianDateString(date) {

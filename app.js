@@ -18,6 +18,7 @@ let settings = {
     fullscreenMode: false,
     screenAwake: true,
     showTomorrowTimes: true,
+    hijriOffset: 0,
     prayers: {
         fajr: { athan: true, sound: 'naji', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
         sunrise: { athan: false, sound: 'naji', volume: 100, preBefore: 0, preEnabled: false, postAfter: 0, postEnabled: false },
@@ -116,23 +117,25 @@ const CITIES = [
 
 function formatTime(hours, minutes, seconds = null, forceFormat = null) {
     const use24 = forceFormat ? forceFormat === '24' : settings.timeFormat === '24';
-    
+
     let h = hours;
     let suffix = '';
-    
+
     if (!use24) {
         suffix = hours >= 12 ? ' م' : ' ص';
         h = hours % 12 || 12;
     }
-    
+
     const hStr = String(h).padStart(2, '0');
     const m = String(minutes).padStart(2, '0');
-    
+
+    const suffixHtml = suffix ? `<span class="time-suffix">${suffix}</span>` : '';
+
     if (seconds !== null) {
         const s = String(seconds).padStart(2, '0');
-        return `${hStr}:${m}:${s}${suffix}`;
+        return `${hStr}:${m}:${s}${suffixHtml}`;
     }
-    return `${hStr}:${m}${suffix}`;
+    return `${hStr}:${m}${suffixHtml}`;
 }
 
 function formatTimeOnly(timeStr) {
@@ -404,20 +407,9 @@ function initNavigation() {
         });
     });
     
-    // Fullscreen toggle in menu
+    // Fullscreen toggle in menu (only for PWA, Android is always immersive)
     document.getElementById('menu-fullscreen-toggle').addEventListener('click', () => {
-        if (window.isCapacitorNative) {
-            const StatusBar = window.Capacitor?.Plugins?.StatusBar;
-            if (StatusBar) {
-                if (document.body.classList.contains('fullscreen')) {
-                    StatusBar.show();
-                    document.body.classList.remove('fullscreen');
-                } else {
-                    StatusBar.hide();
-                    document.body.classList.add('fullscreen');
-                }
-            }
-        } else {
+        if (!window.isCapacitorNative) {
             if (document.fullscreenElement) {
                 document.exitFullscreen?.();
             } else {
@@ -461,7 +453,7 @@ function startClock() {
 
 async function updateClock() {
     const now = new Date();
-    document.getElementById('current-time').textContent = formatTime(now.getHours(), now.getMinutes(), now.getSeconds());
+    document.getElementById('current-time').innerHTML = formatTime(now.getHours(), now.getMinutes());
     await updateCountdown();
     
     // Update prayer card states every minute (when seconds = 0)
@@ -474,7 +466,7 @@ async function updateClock() {
 async function updateDisplay() {
     const now = new Date();
     
-    document.getElementById('hijri-date').textContent = getHijriDateString(now);
+    document.getElementById('hijri-date').textContent = getHijriDateString(now, settings.hijriOffset);
     document.getElementById('gregorian-date').textContent = getGregorianDateString(now);
     
     const cityData = CITIES.find(c => c.id === settings.location);
@@ -485,7 +477,7 @@ async function updateDisplay() {
     
     // Auto-Ramadan detection
     if (settings.autoRamadan) {
-        const isCurrentlyRamadan = isRamadan(now);
+        const isCurrentlyRamadan = isRamadan(now, settings.hijriOffset);
         if (isCurrentlyRamadan !== settings.ramadanMode) {
             settings.ramadanMode = isCurrentlyRamadan;
             saveSettings();
@@ -523,11 +515,11 @@ function updatePrayerTimesDisplay(now, times, tomorrowTimes) {
         const tomorrowIndicator = document.getElementById(`${prayer}-tomorrow`);
         
         if (isPassed && settings.showTomorrowTimes) {
-            timeElement.textContent = formatTimeOnly(tomorrowTimes[index]);
+            timeElement.innerHTML = formatTimeOnly(tomorrowTimes[index]);
             tomorrowIndicator.textContent = 'غداً';
             tomorrowIndicator.style.display = 'block';
         } else {
-            timeElement.textContent = formatTimeOnly(times[index]);
+            timeElement.innerHTML = formatTimeOnly(times[index]);
             tomorrowIndicator.style.display = 'none';
         }
     });
@@ -603,8 +595,17 @@ async function updateCountdown() {
     const hours = Math.floor(diffSeconds / 3600);
     const mins = Math.floor((diffSeconds % 3600) / 60);
     const secs = diffSeconds % 60;
-    
-    document.getElementById('countdown-timer').textContent = formatTime(hours, mins, secs);
+
+    let countdownText;
+    if (diffSeconds <= 300) {
+        // Under 5 minutes: show MM:SS
+        const totalMins = Math.floor(diffSeconds / 60);
+        countdownText = `${String(totalMins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    } else {
+        // Over 5 minutes: show HH:MM (no seconds, no م/ص)
+        countdownText = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+    }
+    document.getElementById('countdown-timer').textContent = countdownText;
     document.getElementById('next-prayer-label').textContent = `${PRAYER_NAMES[nextPrayerName]} بعد`;
     
     if (settings.ramadanMode && settings.showIftarCountdown) {
@@ -652,7 +653,7 @@ async function updateCalendar() {
     for (let day = 1; day <= daysInMonth; day++) {
         const date = new Date(currentCalendarYear, currentCalendarMonth, day);
         const times = await getPrayerTimesAsync(date);
-        const hijriInfo = getHijriInfo(date);
+        const hijriInfo = getHijriInfo(date, settings.hijriOffset);
         
         const row = document.createElement('tr');
         const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
@@ -697,15 +698,15 @@ function applySpecialTheme(date) {
     // Remove all special themes first
     document.body.classList.remove('theme-ramadan', 'theme-eid-fitr', 'theme-eid-adha');
     
-    const eidInfo = getEidInfo(date);
-    
+    const eidInfo = getEidInfo(date, settings.hijriOffset);
+
     if (eidInfo.isEid) {
         if (eidInfo.type === 'fitr') {
             document.body.classList.add('theme-eid-fitr');
         } else if (eidInfo.type === 'adha') {
             document.body.classList.add('theme-eid-adha');
         }
-    } else if (isRamadan(date)) {
+    } else if (isRamadan(date, settings.hijriOffset)) {
         document.body.classList.add('theme-ramadan');
     }
 }
@@ -984,18 +985,50 @@ function playReminder() {
 }
 
 function initQiblaCompass() {
-    const berlinLat = 52.52, berlinLng = 13.405;
+    // Use coordinates based on selected city
+    const cityCoords = {
+        berlin: { lat: 52.52, lng: 13.405 },
+        damascus: { lat: 33.5138, lng: 36.2765 }
+    };
+    const coords = cityCoords[settings.location] || cityCoords.berlin;
     const kaabaLat = 21.4225, kaabaLng = 39.8262;
-    const qiblaDirection = calculateQibla(berlinLat, berlinLng, kaabaLat, kaabaLng);
-    
-    if (window.DeviceOrientationEvent) {
-        window.addEventListener('deviceorientation', (e) => {
-            if (e.alpha !== null) {
-                document.getElementById('qibla-needle').style.transform = `rotate(${qiblaDirection - e.alpha}deg)`;
-            }
-        });
+    const qiblaDirection = calculateQibla(coords.lat, coords.lng, kaabaLat, kaabaLng);
+
+    const needle = document.getElementById('qibla-needle');
+    const compass = document.getElementById('qibla-compass');
+    needle.style.transform = `rotate(${qiblaDirection}deg)`;
+
+    const handler = (e) => {
+        let heading = null;
+        if (e.webkitCompassHeading !== undefined) {
+            // iOS provides compass heading directly
+            heading = e.webkitCompassHeading;
+        } else if (e.alpha !== null) {
+            // Android: alpha is degrees from north (when using absolute event)
+            heading = 360 - e.alpha;
+        }
+        if (heading !== null) {
+            needle.style.transform = `rotate(${qiblaDirection - heading}deg)`;
+            compass.style.transform = `rotate(${-heading}deg)`;
+        }
+    };
+
+    // Prefer deviceorientationabsolute (Android, gives true north)
+    if ('ondeviceorientationabsolute' in window) {
+        window.addEventListener('deviceorientationabsolute', handler);
+    } else if (window.DeviceOrientationEvent) {
+        // iOS or fallback
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+            // iOS 13+ requires permission
+            DeviceOrientationEvent.requestPermission().then(response => {
+                if (response === 'granted') {
+                    window.addEventListener('deviceorientation', handler);
+                }
+            }).catch(() => {});
+        } else {
+            window.addEventListener('deviceorientation', handler);
+        }
     }
-    document.getElementById('qibla-needle').style.transform = `rotate(${qiblaDirection}deg)`;
 }
 
 function calculateQibla(lat1, lng1, lat2, lng2) {
@@ -1114,13 +1147,7 @@ async function initSettings() {
     document.getElementById('fullscreen-mode').addEventListener('change', (e) => {
         settings.fullscreenMode = e.target.checked;
         saveSettings();
-        if (window.isCapacitorNative) {
-            const StatusBar = window.Capacitor?.Plugins?.StatusBar;
-            if (StatusBar) {
-                if (e.target.checked) { StatusBar.hide(); document.body.classList.add('fullscreen'); }
-                else { StatusBar.show(); document.body.classList.remove('fullscreen'); }
-            }
-        } else {
+        if (!window.isCapacitorNative) {
             if (e.target.checked) { document.body.classList.add('fullscreen'); document.documentElement.requestFullscreen?.(); }
             else { document.body.classList.remove('fullscreen'); document.exitFullscreen?.(); }
         }
@@ -1131,7 +1158,8 @@ async function initSettings() {
         if (e.target.checked) requestWakeLock(); else releaseWakeLock();
     });
     document.getElementById('dst-offset').addEventListener('change', (e) => { settings.dstOffset = parseInt(e.target.value); saveSettings(); updateDisplay(); });
-    
+    document.getElementById('hijri-offset').addEventListener('change', (e) => { settings.hijriOffset = parseInt(e.target.value); saveSettings(); updateDisplay(); });
+
     loadSettingsToUI();
 }
 
@@ -1222,13 +1250,10 @@ function loadSettingsToUI() {
     document.getElementById('time-format').value = settings.timeFormat;
     document.getElementById('show-tomorrow-times').checked = settings.showTomorrowTimes;
     document.getElementById('fullscreen-mode').checked = settings.fullscreenMode;
-    if (settings.fullscreenMode && window.isCapacitorNative) {
-        const StatusBar = window.Capacitor?.Plugins?.StatusBar;
-        if (StatusBar) { StatusBar.hide(); document.body.classList.add('fullscreen'); }
-    }
     document.getElementById('screen-awake').checked = settings.screenAwake;
     document.getElementById('dst-offset').value = settings.dstOffset;
-    
+    document.getElementById('hijri-offset').value = settings.hijriOffset || 0;
+
     document.body.classList.toggle('format-12h', settings.timeFormat === '12');
     
     if (settings.location === 'berlin') {

@@ -438,14 +438,14 @@ function getPrayerTimes(date) {
 }
 
 // Dynamic Ramadan detection using Hijri calendar (month 9)
-function isRamadan(date) {
-    const hijri = gregorianToHijri(date.getFullYear(), date.getMonth() + 1, date.getDate());
+function isRamadan(date, offset) {
+    const hijri = getAdjustedHijri(date, offset);
     return hijri.month === 9;
 }
 
 // Get current Ramadan day (1-30)
-function getRamadanDay(date) {
-    const hijri = gregorianToHijri(date.getFullYear(), date.getMonth() + 1, date.getDate());
+function getRamadanDay(date, offset) {
+    const hijri = getAdjustedHijri(date, offset);
     if (hijri.month !== 9) return 0;
     return hijri.day;
 }
@@ -453,9 +453,9 @@ function getRamadanDay(date) {
 // Dynamic Eid detection using Hijri calendar
 // Eid al-Fitr = 1-3 Shawwal (month 10, days 1-3) - 3 days
 // Eid al-Adha = 10-13 Dhul Hijjah (month 12, days 10-13) - 4 days
-function getEidInfo(date) {
-    const hijri = gregorianToHijri(date.getFullYear(), date.getMonth() + 1, date.getDate());
-    
+function getEidInfo(date, offset) {
+    const hijri = getAdjustedHijri(date, offset);
+
     if (hijri.month === 10 && hijri.day >= 1 && hijri.day <= 3) {
         return { isEid: true, name: 'عيد الفطر المبارك', type: 'fitr', day: hijri.day };
     }
@@ -466,8 +466,8 @@ function getEidInfo(date) {
 }
 
 // Get Hijri info for any date (for calendar marking)
-function getHijriInfo(date) {
-    const hijri = gregorianToHijri(date.getFullYear(), date.getMonth() + 1, date.getDate());
+function getHijriInfo(date, offset) {
+    const hijri = getAdjustedHijri(date, offset);
     return {
         month: hijri.month,
         day: hijri.day,
