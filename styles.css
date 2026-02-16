@@ -378,20 +378,21 @@ body {
 }
 
 .next-prayer-label {
-    font-size: clamp(1.8rem, 6vw, 2.5rem);
+    font-size: clamp(1.5rem, 5vh, 2.5rem);
     font-weight: 700;
     color: var(--accent);
     font-family: 'Amiri', serif;
     text-shadow: 0 2px 10px var(--accent-glow);
+    margin-bottom: 2vh;
 }
 
 .countdown-timer {
-    font-size: clamp(4rem, 18vw, 7rem);
+    font-size: min(clamp(6rem, 24vh, 14rem), 27vw);
     font-weight: 700;
     color: var(--text-primary);
-    margin-top: 0.5vh;
     font-family: 'Noto Naskh Arabic', serif;
     letter-spacing: 3px;
+    line-height: 1;
 }
 
 /* ===== Prayer Times Grid ===== */
@@ -882,12 +883,12 @@ input[type="text"] { width: 150px; }
 
 @media (max-height: 600px) {
     .current-time { font-size: clamp(2.5rem, 12vw, 3.5rem); }
-    .countdown-timer { font-size: clamp(2rem, 12vw, 3.5rem); }
+    .countdown-timer { font-size: clamp(3rem, 15vh, 5rem); }
     .next-prayer-label { font-size: clamp(1rem, 4vw, 1.5rem); }
 }
 
 /* 12-hour format */
 body.format-12h .current-time { font-size: clamp(3rem, 14vw, 5rem); }
-body.format-12h .countdown-timer { font-size: clamp(3.5rem, 16vw, 6rem); }
+body.format-12h .countdown-timer { font-size: min(clamp(5.5rem, 22vh, 13rem), 25vw); }
 body.format-12h .prayer-time { font-size: clamp(1.3rem, 4.5vw, 1.7rem); }
 body.format-12h .prayer-card { padding: clamp(0.5rem, 2vh, 1rem) 0.3rem; }
