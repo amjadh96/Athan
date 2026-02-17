@@ -605,7 +605,9 @@ async function updateCountdown() {
         // Over 5 minutes: show HH:MM (no seconds, no م/ص)
         countdownText = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
     }
-    document.getElementById('countdown-timer').textContent = countdownText;
+    const timerEl = document.getElementById('countdown-timer');
+    timerEl.textContent = countdownText;
+    timerEl.classList.toggle('urgent', diffSeconds <= 300);
     document.getElementById('next-prayer-label').textContent = `${PRAYER_NAMES[nextPrayerName]} بعد`;
     
     if (settings.ramadanMode && settings.showIftarCountdown) {
