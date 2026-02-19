@@ -609,7 +609,13 @@ async function updateCountdown() {
     timerEl.textContent = countdownText;
     timerEl.classList.toggle('urgent', diffSeconds <= 300);
     document.getElementById('next-prayer-label').textContent = `${PRAYER_NAMES[nextPrayerName]} بعد`;
-    
+
+    // Trigger athan check immediately when countdown reaches 0
+    // (instead of waiting up to 15s for the interval-based check)
+    if (diffSeconds <= 1) {
+        checkAthanTime();
+    }
+
     if (settings.ramadanMode && settings.showIftarCountdown) {
         updateIftarCountdown(now, times);
     }
